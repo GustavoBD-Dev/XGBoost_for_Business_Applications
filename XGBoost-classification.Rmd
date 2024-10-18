@@ -1,0 +1,125 @@
+---
+title: "XGBoost - R Notebook"
+output: html_notebook
+---
+
+Retrieve the data
+
+```{r}
+data <- read.csv("bank-full.csv", sep=";")
+data
+```
+
+Looking at data source
+
+```{r}
+str(data)
+```
+
+Create dataset with numerical variables
+
+```{r}
+#install.packages("dpylr")
+library(dplyr)
+dataset <- data  %>% select_if(is.numeric)
+dataset
+```
+
+Summary statistics and correlation matrix
+
+```{r}
+summary(dataset)
+```
+
+```{r}
+cor(dataset)
+```
+
+Add dependent variable to the dataset
+
+```{r}
+dataset <- cbind(data$y, dataset)
+colnames(dataset)[1] <- "yes"
+dataset
+```
+
+Training and Test set
+
+```{r}
+# Split dataset into training and test set
+# install.packages("caTools")
+library(caTools)
+set.seed(1502)
+split <- sample.split(dataset$yes, SplitRatio = 0.8)
+training_set <- subset(dataset, split == TRUE)
+test_set <-subset(dataset, split == FALSE)
+```
+
+Isolating X and Y variables
+
+```{r}
+# Isolate the y variable
+train.y <- as.numeric( as.factor(training_set$yes) ) -1 
+test.y <- as.numeric( as.factor(test_set$yes) ) -1 
+
+# Isolate the x variable
+train.X <- as.matrix( training_set[, 2:ncol(training_set)])
+test.X <- as.matrix( test_set[, 2:ncol(test_set)])
+```
+
+Setting XGBoost parameters
+```{r}
+# state the parameters
+parameters <- list(eta = 0.3,
+                   max_depth = 6,
+                   subsample = 1,
+                   colsample_bytree = 1,
+                   min_child_weight = 1,
+                   gamma = 0,
+                   set.seed = 1502,
+                   eval_metric = "auc",
+                   objective = "binary:logistic",
+                   booster = "gbtree")
+```
+
+Parallel Processing
+```{r}
+# Detect cores
+# install.packages("doParallel")
+library(doParallel)
+detectCores()
+```
+Running XGBoost
+
+```{r}
+#install.packages("xgboost")
+library(xgboost)
+
+model1 <- xgboost(data = train.X,
+                  label = train.y,
+                  sed.seed = 1502,
+                  nthread = 6,
+                  nround = 100,
+                  params = parameters,
+                  print_every_n = 50,
+                  early_stopping_rounds = 10)
+
+```
+Predicting with XGBoost
+
+```{r}
+# predicting
+
+predictions1 <- predict(model1, newdata = test.X)
+predictions1 <- ifelse(predictions1 > 0.5, 1, 0)
+```
+
+Evaluate the Model (Confusion Matrix)
+```{r}
+#install.packages("caret")
+library(caret)
+confusionMatrix(table(predictions1, test.y))
+```
+
+
+
