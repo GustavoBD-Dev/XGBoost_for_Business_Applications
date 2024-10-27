@@ -122,4 +122,100 @@ confusionMatrix(table(predictions1, test.y))
 ```
 
 
+Transforming factor into numerical variables
+
+```{r}
+#install.packages("fastDummies")
+library(fastDummies)
+dataset_dummy <- dummy_cols(data, remove_first_dummy = TRUE)
+dataset_dummy <- dataset_dummy[ , 18:ncol(dataset_dummy)]
+```
+
+Preparing final dataset
+
+```{r}
+dataset <- cbind(dataset, dataset_dummy)
+dataset <- dataset %>% select(-y_yes)
+```
+
+## Second XGBoost Model
+
+```{r}
+# Split dataset into training and test set part 2
+# install.packages("caTools")
+library(caTools)
+set.seed(1502)
+split <- sample.split(dataset$yes, SplitRatio = 0.8)
+training_set <- subset(dataset, split == TRUE)
+test_set <-subset(dataset, split == FALSE)
+```
+
+```{r}
+# Isolate the y variable part 2
+train.y <- as.numeric( as.factor(training_set$yes) ) -1 
+test.y <- as.numeric( as.factor(test_set$yes) ) -1 
+
+# Isolate the x variable
+train.X <- as.matrix( training_set[, 2:ncol(training_set)])
+test.X <- as.matrix( test_set[, 2:ncol(test_set)])
+```
+
+```{r}
+# state the parameters
+parameters <- list(eta = 0.3,
+                   max_depth = 6,
+                   subsample = 1,
+                   colsample_bytree = 1,
+                   min_child_weight = 1,
+                   gamma = 0,
+                   set.seed = 1502,
+                   eval_metric = "auc",
+                   objective = "binary:logistic",
+                   booster = "gbtree")
+```
+
+```{r}
+# Detect cores
+# install.packages("doParallel")
+library(doParallel)
+detectCores()
+```
+
+```{r}
+#install.packages("xgboost")
+library(xgboost)
+
+model2 <- xgboost(data = train.X,
+                  label = train.y,
+                  sed.seed = 1502,
+                  nthread = 6,
+                  nround = 100,
+                  params = parameters,
+                  print_every_n = 50,
+                  early_stopping_rounds = 10)
+
+```
+
+Predictions and Matrix Confusion 2
+
+```{r}
+# Predicting part 2
+
+predictions2 <- predict(model2, newdata = test.X)
+predictions2 <- ifelse(predictions2 > 0.5, 1, 0)
+
+# Evaluate the Model (Confusion Matrix) part 2
+
+#install.packages("caret")
+#library(caret)
+confusionMatrix(table(predictions2, test.y))
+```
+
+### Start Parallel Processing
+
+
+
+
+
+
 
