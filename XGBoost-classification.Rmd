@@ -122,4 +122,246 @@ confusionMatrix(table(predictions1, test.y))
 ```
 
 
+Transforming factor into numerical variables
+
+```{r}
+#install.packages("fastDummies")
+library(fastDummies)
+dataset_dummy <- dummy_cols(data, remove_first_dummy = TRUE)
+dataset_dummy <- dataset_dummy[ , 18:ncol(dataset_dummy)]
+```
+
+Preparing final dataset
+
+```{r}
+dataset <- cbind(dataset, dataset_dummy)
+dataset <- dataset %>% select(-y_yes)
+```
+
+## Second XGBoost Model
+
+```{r}
+# Split dataset into training and test set part 2
+# install.packages("caTools")
+library(caTools)
+set.seed(1502)
+split <- sample.split(dataset$yes, SplitRatio = 0.8)
+training_set <- subset(dataset, split == TRUE)
+test_set <-subset(dataset, split == FALSE)
+```
+
+```{r}
+# Isolate the y variable part 2
+train.y <- as.numeric( as.factor(training_set$yes) ) -1 
+test.y <- as.numeric( as.factor(test_set$yes) ) -1 
+
+# Isolate the x variable
+train.X <- as.matrix( training_set[, 2:ncol(training_set)])
+test.X <- as.matrix( test_set[, 2:ncol(test_set)])
+```
+
+```{r}
+# state the parameters
+parameters <- list(eta = 0.3,
+                   max_depth = 6,
+                   subsample = 1,
+                   colsample_bytree = 1,
+                   min_child_weight = 1,
+                   gamma = 0,
+                   set.seed = 1502,
+                   eval_metric = "auc",
+                   objective = "binary:logistic",
+                   booster = "gbtree")
+```
+
+```{r}
+# Detect cores
+# install.packages("doParallel")
+library(doParallel)
+detectCores()
+```
+
+```{r}
+#install.packages("xgboost")
+library(xgboost)
+
+model2 <- xgboost(data = train.X,
+                  label = train.y,
+                  sed.seed = 1502,
+                  nthread = 6,
+                  nround = 100,
+                  params = parameters,
+                  print_every_n = 50,
+                  early_stopping_rounds = 10)
+
+```
+
+Predictions and Matrix Confusion 2
+
+```{r}
+# Predicting part 2
+
+predictions2 <- predict(model2, newdata = test.X)
+predictions2 <- ifelse(predictions2 > 0.5, 1, 0)
+
+# Evaluate the Model (Confusion Matrix) part 2
+
+#install.packages("caret")
+#library(caret)
+confusionMatrix(table(predictions2, test.y))
+```
+
+### Start Parallel Processing
+
+```{r}
+library(doParallel)
+cpu <- makeCluster(6)
+registerDoParallel(cpu)
+```
+
+Cross validation inputs
+
+```{r}
+# statin the inputs
+y <- as.numeric( as.factor(dataset$yes) ) -1 
+X <- as.matrix( dataset[, 2:ncol(dataset)])
+```
+
+Cross validation params
+
+```{r}
+# control the computational nuances of the train function
+tune_control <- trainControl(method = "cv", 
+                             allowParallel = TRUE,
+                             number = 5)
+```
+
+Set the parameters
+
+```{r}
+tune_grid <- expand.grid(nrounds = seq(from = 50, to = 600, by = 50), 
+                         eta = c(0.1, 0.2, 0.3, 0.4),
+                         max_depth = seq(from=2, to=10, by = 2),
+                         subsample = c(0.5, 0.7, 1),
+                         colsample_bytree = 1,
+                         min_child_weight = 1,
+                         gamma = 0)
+```
+
+
+Parameter tunning round 2
+
+```{r}
+# cross validation and parameter tunning start
+start <- Sys.time()
+xgb_tune <- train(x = X,
+                  y = y,
+                  method = "xgbTree",
+                  trControl = tune_control,
+                  tuneGrid = tune_grid)
+end <- Sys.time()
+```
+
+# See the parameters
+```{r}
+xgb_tune$bestTune
+```
+```{r}
+View(xgb_tune$results)
+```
+
+### Start Parallel Processing 2
+
+```{r}
+cpu <- makeCluster(6)
+registerDoParallel(cpu)
+
+# Set the parameters part 2
+tune_grid2 <- expand.grid(nrounds = seq(from = 50, to = 600, by = 50), 
+                         eta = xgb_tune$bestTune$eta,
+                         max_depth = xgb_tune$bestTune$max_depth,
+                         subsample = xgb_tune$bestTune$subsample,
+                         colsample_bytree = c(0.5, 0.7, 1),
+                         min_child_weight = seq(1, 6, by=2),
+                         gamma = c(0, 0.05, 0.1, 0.15))
+
+# cross validation and parameter tunning start part 2
+start <- Sys.time()
+xgb_tune2 <- train(x = X,
+                  y = y,
+                  method = "xgbTree",
+                  trControl = tune_control,
+                  tuneGrid = tune_grid2)
+end <- Sys.time()
+
+# see the parameters
+xgb_tune2$bestTune
+View(xgb_tune2$results)
+```
+Best Tune
+nrounds = 400
+max_depth = 4
+gamma = 0
+eta = 0.1
+colsample_bytree = 1
+min_child_weight = 5
+subsample = 1
+
+
+# Final XGBoost Model
+
+```{r}
+
+# Set the parameters part 3
+parameters3 <- list(eta = xgb_tune$bestTune$eta,
+                   max_depth = xgb_tune$bestTune$max_depth,
+                   subsample = xgb_tune$bestTune$subsample,
+                   colsample_bytree = xgb_tune$bestTune$colsample_bytree,
+                   min_child_weight = xgb_tune$bestTune$min_child_weight,
+                   gamma = xgb_tune$bestTune$gamma,
+                   set.seed = 1502,
+                   eval_metric = "auc",
+                   objective = "binary:logistic",
+                   booster = "gbtree")
+
+# run XGBoost
+model3 <- xgboost(data = train.X,
+                  label = train.y,
+                  sed.seed = 1502,
+                  nthread = 6,
+                  nround = xgb_tune$bestTune$nrounds,
+                  params = parameters,
+                  print_every_n = 50,
+                  early_stopping_rounds = 10)
+
+```
+
+# Business Perspective
+```{r}
+# Predicting part 3
+predictions3 <- predict(model3, newdata = test.X)
+predictions3 <- ifelse(predictions3 > 0.5, 1, 0)
+
+# Evaluate the Model (Confusion Matrix) part 2
+confusionMatrix(table(predictions3, test.y))
+```
+
+Importance Drivers and SHAP Values
+
+```{r}
+# Importance drivers
+importance <- xgb.importance(feature_names = colnames(test.X),
+                             model = model3)
+
+xgb.plot.importance(importance_matrix = importance)
+
+```
+
+```{r}
+# SHAP Values
+xgb.plot.shap(data = test.X,
+              model = model3,
+              top_n = 3)
+
+```
 
