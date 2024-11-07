@@ -346,3 +346,22 @@ predictions3 <- ifelse(predictions3 > 0.5, 1, 0)
 confusionMatrix(table(predictions3, test.y))
 ```
 
+Importance Drivers and SHAP Values
+
+```{r}
+# Importance drivers
+importance <- xgb.importance(feature_names = colnames(test.X),
+                             model = model3)
+
+xgb.plot.importance(importance_matrix = importance)
+
+```
+
+```{r}
+# SHAP Values
+xgb.plot.shap(data = test.X,
+              model = model3,
+              top_n = 3)
+
+```
+
