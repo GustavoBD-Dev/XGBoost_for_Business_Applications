@@ -306,3 +306,43 @@ eta = 0.1
 colsample_bytree = 1
 min_child_weight = 5
 subsample = 1
+
+
+# Final XGBoost Model
+
+```{r}
+
+# Set the parameters part 3
+parameters3 <- list(eta = xgb_tune$bestTune$eta,
+                   max_depth = xgb_tune$bestTune$max_depth,
+                   subsample = xgb_tune$bestTune$subsample,
+                   colsample_bytree = xgb_tune$bestTune$colsample_bytree,
+                   min_child_weight = xgb_tune$bestTune$min_child_weight,
+                   gamma = xgb_tune$bestTune$gamma,
+                   set.seed = 1502,
+                   eval_metric = "auc",
+                   objective = "binary:logistic",
+                   booster = "gbtree")
+
+# run XGBoost
+model3 <- xgboost(data = train.X,
+                  label = train.y,
+                  sed.seed = 1502,
+                  nthread = 6,
+                  nround = xgb_tune$bestTune$nrounds,
+                  params = parameters,
+                  print_every_n = 50,
+                  early_stopping_rounds = 10)
+
+```
+
+# Business Perspective
+```{r}
+# Predicting part 3
+predictions3 <- predict(model3, newdata = test.X)
+predictions3 <- ifelse(predictions3 > 0.5, 1, 0)
+
+# Evaluate the Model (Confusion Matrix) part 2
+confusionMatrix(table(predictions3, test.y))
+```
+
